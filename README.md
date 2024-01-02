@@ -18,17 +18,18 @@ Integrations:
 
 ## Screenshots
 
-![image](https://github.com/slipx06/Sunsynk-Home-Assistant-Dash/assets/7227275/269cde5f-30db-4de8-8ad1-6a2b0d31799b)
-![image](https://github.com/slipx06/Sunsynk-Home-Assistant-Dash/assets/7227275/7ca741c1-faff-45cd-9f20-34010c4c5a5f)
-![image](https://github.com/slipx06/Sunsynk-Home-Assistant-Dash/assets/7227275/af72d28b-540a-452f-998c-7f9f7c2ca2a8)
-![image](https://github.com/slipx06/Sunsynk-Home-Assistant-Dash/assets/7227275/2e150171-1ee2-45f6-bace-b844edb1fa32)
+![image](https://github.com/slipx06/Sunsynk-Home-Assistant-Dash/assets/7227275/b8ca11e9-bfeb-4304-81f2-5eb8f9586152)
+![image](https://github.com/slipx06/Sunsynk-Home-Assistant-Dash/assets/7227275/7bb47ce1-5a02-42b6-9f19-66b30713a1c8)
+![image](https://github.com/slipx06/Sunsynk-Home-Assistant-Dash/assets/7227275/10f55ea5-4876-4839-af09-5de1ca3a7967)
+![image](https://github.com/slipx06/Sunsynk-Home-Assistant-Dash/assets/7227275/2bf9c6b5-3105-400a-bfd0-89f3f8dbc722)
 
 ## Installation
-Data can be collected from the inverter using the RS485 port. There are a number of different ways to do this but I'm using an ESP32 chip running ESPHome (See ESPHome-8K-Sunsynk.yaml)
+Data can be collected from the inverter using the RS485 port. There are a number of different ways to do this but I'm using an ESP32 chip running ESPHome (See [ESPHome-1P-Sunsynk-Deye.yaml](https://github.com/slipx06/Sunsynk-Home-Assistant-Dash/blob/main/ESPHome-1P-Sunsynk-Deye.yaml))
 
 Create a new view on your current Dashboard and set the view type to Panel (1 card) as shown below:
 
 ![image](https://user-images.githubusercontent.com/7227275/223527428-b4508e6c-cf2d-473a-b63c-ffad11d2630d.png)
+
 
 You can then edit the Dashboard (using the code editor) and paste the contents of the Dashboard.
 You'll need to adjust all the sensor names to match yours and install the necessary custom components. 
@@ -54,17 +55,17 @@ Added remaining battery time. You will need to add the following template sensor
           {% set sellTime5 = strptime(states('sensor.sunsynk_time_slot_5'), '%H:%M') %}
           {% set sellTime6 = strptime(states('sensor.sunsynk_time_slot_6'), '%H:%M') %}
           {% if now >= sellTime1 and now < sellTime2 %}
-            {{ states('number.sunsynk_system_mode_soc_time1') | int }}
+            {{ states('number.sunsynk_prog1_capacity') | int }}
           {% elif now >= sellTime2 and now < sellTime3 %}
-            {{ states('number.sunsynk_system_mode_soc_time2') | int }}
+            {{ states('number.sunsynk_prog2_capacity') | int }}
           {% elif now >= sellTime3 and now < sellTime4 %}
-            {{ states('number.sunsynk_system_mode_soc_time3') | int }}
+            {{ states('number.sunsynk_prog3_capacity') | int }}
           {% elif now >= sellTime4 and now < sellTime5 %}
-            {{ states('number.sunsynk_system_mode_soc_time4') | int }}
+            {{ states('number.sunsynk_prog4_capacity') | int }}
           {% elif now >= sellTime5 and now < sellTime6 %}
-            {{ states('number.sunsynk_system_mode_soc_time5') | int }}
+            {{ states('number.sunsynk_prog5_capacity') | int }}
           {% elif now >= sellTime6 or now < sellTime1 %}
-            {{ states('number.sunsynk_system_mode_soc_time6') | int }}
+            {{ states('number.sunsynk_prog6_capacity') | int }}
           {% else %}
             {{ states('sensor.sunsynk_battery_capacity_shutdown') | int }}
           {% endif %}
@@ -183,7 +184,7 @@ cards:
         state_color: true
   - type: entities
     entities:
-      - entity: switch.sunsynk_system_mode_grid_charge_time1
+      - entity: switch.sunsynk_prog1_grid_charge
         type: custom:multiple-entity-row
         name: Program 1
         toggle: true
@@ -195,10 +196,10 @@ cards:
             name: From
           - entity: sensor.sunsynk_time_slot_2
             name: To
-          - entity: number.sunsynk_system_mode_soc_time1
+          - entity: number.sunsynk_prog1_capacity
             name: SOC
             format: precision0
-      - entity: switch.sunsynk_system_mode_grid_charge_time2
+      - entity: switch.sunsynk_prog2_grid_charge
         type: custom:multiple-entity-row
         name: Program 2
         toggle: true
@@ -210,10 +211,10 @@ cards:
             name: From
           - entity: sensor.sunsynk_time_slot_3
             name: To
-          - entity: number.sunsynk_system_mode_soc_time2
+          - entity: number.sunsynk_prog2_capacity
             name: SOC
             format: precision0
-      - entity: switch.sunsynk_system_mode_grid_charge_time3
+      - entity: switch.sunsynk_prog3_grid_charge
         type: custom:multiple-entity-row
         name: Program 3
         toggle: true
@@ -225,10 +226,10 @@ cards:
             name: From
           - entity: sensor.sunsynk_time_slot_4
             name: To
-          - entity: number.sunsynk_system_mode_soc_time3
+          - entity: number.sunsynk_prog3_capacity
             name: SOC
             format: precision0
-      - entity: switch.sunsynk_system_mode_grid_charge_time4
+      - entity: switch.sunsynk_prog4_grid_charge
         type: custom:multiple-entity-row
         name: Program 4
         toggle: true
@@ -240,10 +241,10 @@ cards:
             name: From
           - entity: sensor.sunsynk_time_slot_5
             name: To
-          - entity: number.sunsynk_system_mode_soc_time4
+          - entity: number.sunsynk_prog4_capacity
             name: SOC
             format: precision0
-      - entity: switch.sunsynk_system_mode_grid_charge_time5
+      - entity: switch.sunsynk_prog5_grid_charge
         type: custom:multiple-entity-row
         name: Program 5
         toggle: true
@@ -255,10 +256,10 @@ cards:
             name: From
           - entity: sensor.sunsynk_time_slot_6
             name: To
-          - entity: number.sunsynk_system_mode_soc_time5
+          - entity: number.sunsynk_prog5_capacity
             name: SOC
             format: precision0
-      - entity: switch.sunsynk_system_mode_grid_charge_time6
+      - entity: switch.sunsynk_prog6_grid_charge
         type: custom:multiple-entity-row
         name: Program 6
         toggle: true
@@ -270,7 +271,7 @@ cards:
             name: From
           - entity: sensor.sunsynk_time_slot_1
             name: To
-          - entity: number.sunsynk_system_mode_soc_time6
+          - entity: number.sunsynk_prog6_capacity
             name: SOC
             format: precision0
     state_color: true

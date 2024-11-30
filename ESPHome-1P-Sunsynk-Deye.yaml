@@ -34,6 +34,7 @@ api:
 
 ota:
   password: !secret ota_password_sunsynk
+  platform: esphome
 
 wifi:
   ssid: !secret wifi_ssid
@@ -74,8 +75,68 @@ modbus_controller:
     update_interval: "15s"
     command_throttle: "50ms"
 
+#Set the interval to sync your inverter time with HA or comment out to disable 
+interval:
+  - interval: 3600s
+    then:
+      - lambda: |-
+          esphome::modbus_controller::ModbusController *controller = id(inverter);
+          time_t now = ::time(nullptr);
+          struct tm *time_info = ::localtime(&now);
+          int seconds = time_info->tm_sec;
+          int minutes = time_info->tm_min;
+          int hour = time_info->tm_hour;
+          int day = time_info->tm_mday;
+          int month = time_info->tm_mon + 1;
+          int year = time_info->tm_year;
+          year = year + 1900;
+          int year1 = year - 2000;
+          
+          uint16_t reg22_value = (year1 << 8) | month;
+          uint16_t reg23_value = (day << 8) | hour;
+          uint16_t reg24_value = (minutes << 8) | seconds;
+          
+          if (year != 1970) {
+            std::vector<uint16_t> rtc_data = {reg22_value, reg23_value, reg24_value};
+            esphome::modbus_controller::ModbusCommandItem set_rtc_command =
+                esphome::modbus_controller::ModbusCommandItem::create_write_multiple_command(controller, 22, rtc_data.size(), rtc_data);
+            controller->queue_command(set_rtc_command);
+            ESP_LOGI("Time Sync", "Seconds: %d, Minutes: %d, Hour: %d, Day: %d, Month: %d, Year: %d", seconds, minutes, hour, day, month, year);
+          }
+
 ############################################### BINARY SENSORS ########################################
-binary_sensor:           
+binary_sensor:
+  - platform: homeassistant            # Manual Time sync. Create an input_boolean sensor in HA
+    entity_id: input_boolean.sync_inverter_time
+    name: "Sync Time"
+    id: sync_time
+    on_press:
+      then:
+        - lambda: |-
+            esphome::modbus_controller::ModbusController *controller = id(inverter);
+            time_t now = ::time(nullptr);
+            struct tm *time_info = ::localtime(&now);
+            int seconds = time_info->tm_sec;
+            int minutes = time_info->tm_min;
+            int hour = time_info->tm_hour;
+            int day = time_info->tm_mday;
+            int month = time_info->tm_mon + 1;
+            int year = time_info->tm_year;
+            year = year + 1900;
+            int year1 = year - 2000;
+            
+            uint16_t reg22_value = (year1 << 8) | month;
+            uint16_t reg23_value = (day << 8) | hour;
+            uint16_t reg24_value = (minutes << 8) | seconds;
+            
+            if (year != 1970) {
+              std::vector<uint16_t> rtc_data = {reg22_value, reg23_value, reg24_value};
+              esphome::modbus_controller::ModbusCommandItem set_rtc_command =
+                  esphome::modbus_controller::ModbusCommandItem::create_write_multiple_command(controller, 22, rtc_data.size(), rtc_data);
+              controller->queue_command(set_rtc_command);
+              ESP_LOGI("Time Sync", "Seconds: %d, Minutes: %d, Hour: %d, Day: %d, Month: %d, Year: %d", seconds, minutes, hour, day, month, year);
+            }
+
   - platform: modbus_controller            # 194 Grid Connected Status
     modbus_controller_id: inverter
     name: "${friendly_name} Grid Connected Status"
@@ -966,6 +1027,7 @@ sensor:
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
+    restore: true
     filters:
       # Multiplication factor from W to kW is 0.001
       - multiply: 0.001
@@ -977,6 +1039,7 @@ sensor:
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
+    restore: true
     filters:
       # Multiplication factor from W to kW is 0.001
       - multiply: 0.001
@@ -988,6 +1051,7 @@ sensor:
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
+    restore: true
     filters:
       # Multiplication factor from W to kW is 0.001
       - multiply: 0.001
@@ -999,6 +1063,7 @@ sensor:
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
+    restore: true
     filters:
       # Multiplication factor from W to kW is 0.001
       - multiply: 0.001
@@ -1010,6 +1075,7 @@ sensor:
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
+    restore: true
     filters:
       # Multiplication factor from W to kW is 0.001
       - multiply: 0.001
@@ -1021,6 +1087,7 @@ sensor:
     state_class: total_increasing
     device_class: energy
     accuracy_decimals: 3
+    restore: true
     filters:
       # Multiplication factor from W to kW is 0.001
       - multiply: 0.001
@@ -1739,6 +1806,7 @@ text_sensor:
     raw_encode: HEXBYTES
     address: 003
     register_count: 5
+    response_size: 10
     internal: true
 
 
@@ -1758,6 +1826,41 @@ text_sensor:
       }
 
       return asciiData;
+
+  - platform: modbus_controller            # 013 Inverter MCU Firmware Version
+    modbus_controller_id: inverter
+    id: inverter_esphome_MCU_version_13
+    register_type: holding
+    skip_updates: ${settings_skipped_updates}
+    raw_encode: HEXBYTES
+    address: 013
+    internal: true
+
+  - platform: modbus_controller            # 015 Inverter MCU Firmware Version
+    modbus_controller_id: inverter
+    id: inverter_esphome_MCU_version_15
+    register_type: holding
+    skip_updates: ${settings_skipped_updates}
+    raw_encode: HEXBYTES
+    address: 015
+    internal: true
+
+  - platform: template                      # 015-013 Inverter MCU version
+    name: "${friendly_name} MCU Version"
+    id: inverter_esphome_main_version
+    icon: "mdi:text"
+    lambda: |-
+      return id( inverter_esphome_MCU_version_15).state + "-" + id(inverter_esphome_MCU_version_13).state;
+
+  - platform: modbus_controller             # 016 Inverter LCD Firmware Version
+    modbus_controller_id: inverter
+    id: inverter_esphome_comm_lcd_firmware_16
+    name: "${friendly_name} COMM Version"
+    register_type: holding
+    skip_updates: ${settings_skipped_updates}
+    raw_encode: HEXBYTES
+    icon: "mdi:text"
+    address: 016
 
 ################################################ SELECT SENSORS ################################################
 
@@ -1987,164 +2090,165 @@ select:
       uint16_t modified = ((unmodified & ~0x0003) | value);
       return modified;
 
-  - platform: modbus_controller            #274  Select Prog1 Mode Option
-    use_write_multiple: true
-    modbus_controller_id: inverter
-    name: "${friendly_name} Prog1 Mode Option"
-    id: inverter_esphome_select_system_mode_program_option_time_1
-    address: 274
-    value_type: U_WORD
-    optionsmap:
-      "None": 0
-      "General": 4
-      "Backup": 8
-      "Charge": 16
-    lambda: |-
-      if ((x & 0x1C) == 0)
-        return  std::string("None");
-      if ((x & 0x1C) == 4)
-        return  std::string("General");
-      if ((x & 0x1C) == 8)
-        return  std::string("Battery");
-      if ((x & 0x1C) == 16)
-        return  std::string("Charge");
-      return {};
-    write_lambda: |-
-      uint16_t unmodified =  id(reg_274_raw).state;
-      uint16_t modified = ((unmodified & ~0x1C) | value);
-      return modified;
+#Disabled as these are for Turbo Energy Inverters
+  # - platform: modbus_controller            #274  Select Prog1 Mode Option
+  #   use_write_multiple: true
+  #   modbus_controller_id: inverter
+  #   name: "${friendly_name} Prog1 Mode Option"
+  #   id: inverter_esphome_select_system_mode_program_option_time_1
+  #   address: 274
+  #   value_type: U_WORD
+  #   optionsmap:
+  #     "None": 0
+  #     "General": 4
+  #     "Backup": 8
+  #     "Charge": 16
+  #   lambda: |-
+  #     if ((x & 0x1C) == 0)
+  #       return  std::string("None");
+  #     if ((x & 0x1C) == 4)
+  #       return  std::string("General");
+  #     if ((x & 0x1C) == 8)
+  #       return  std::string("Battery");
+  #     if ((x & 0x1C) == 16)
+  #       return  std::string("Charge");
+  #     return {};
+  #   write_lambda: |-
+  #     uint16_t unmodified =  id(reg_274_raw).state;
+  #     uint16_t modified = ((unmodified & ~0x1C) | value);
+  #     return modified;
 
-  - platform: modbus_controller            #275  Select Prog2 Mode Option
-    use_write_multiple: true
-    modbus_controller_id: inverter
-    name: "${friendly_name} Prog2 Mode Option"
-    id: inverter_esphome_select_system_mode_program_option_time_2
-    address: 275
-    value_type: U_WORD
-    optionsmap:
-      "None": 0
-      "General": 4
-      "Backup": 8
-      "Charge": 16
-    lambda: |-
-      if ((x & 0x1C) == 0)
-        return  std::string("None");
-      if ((x & 0x1C) == 4)
-        return  std::string("General");
-      if ((x & 0x1C) == 8)
-        return  std::string("Battery");
-      if ((x & 0x1C) == 16)
-        return  std::string("Charge");
-      return {};
-    write_lambda: |-
-      uint16_t unmodified =  id(reg_275_raw).state;
-      uint16_t modified = ((unmodified & ~0x1C) | value);
-      return modified;
+  # - platform: modbus_controller            #275  Select Prog2 Mode Option
+  #   use_write_multiple: true
+  #   modbus_controller_id: inverter
+  #   name: "${friendly_name} Prog2 Mode Option"
+  #   id: inverter_esphome_select_system_mode_program_option_time_2
+  #   address: 275
+  #   value_type: U_WORD
+  #   optionsmap:
+  #     "None": 0
+  #     "General": 4
+  #     "Backup": 8
+  #     "Charge": 16
+  #   lambda: |-
+  #     if ((x & 0x1C) == 0)
+  #       return  std::string("None");
+  #     if ((x & 0x1C) == 4)
+  #       return  std::string("General");
+  #     if ((x & 0x1C) == 8)
+  #       return  std::string("Battery");
+  #     if ((x & 0x1C) == 16)
+  #       return  std::string("Charge");
+  #     return {};
+  #   write_lambda: |-
+  #     uint16_t unmodified =  id(reg_275_raw).state;
+  #     uint16_t modified = ((unmodified & ~0x1C) | value);
+  #     return modified;
 
-  - platform: modbus_controller            #276  Select Prog3 Mode Option
-    use_write_multiple: true
-    modbus_controller_id: inverter
-    name: "${friendly_name} Prog3 Mode Option"
-    id: inverter_esphome_select_system_mode_program_option_time_3
-    address: 276
-    value_type: U_WORD
-    optionsmap:
-      "None": 0
-      "General": 4
-      "Backup": 8
-      "Charge": 16
-    lambda: |-
-      if ((x & 0x1C) == 0)
-        return  std::string("None");
-      if ((x & 0x1C) == 4)
-        return  std::string("General");
-      if ((x & 0x1C) == 8)
-        return  std::string("Battery");
-      if ((x & 0x1C) == 16)
-        return  std::string("Charge");
-      return {};
-    write_lambda: |-
-      uint16_t unmodified =  id(reg_276_raw).state;
-      uint16_t modified = ((unmodified & ~0x1C) | value);
-      return modified;
+  # - platform: modbus_controller            #276  Select Prog3 Mode Option
+  #   use_write_multiple: true
+  #   modbus_controller_id: inverter
+  #   name: "${friendly_name} Prog3 Mode Option"
+  #   id: inverter_esphome_select_system_mode_program_option_time_3
+  #   address: 276
+  #   value_type: U_WORD
+  #   optionsmap:
+  #     "None": 0
+  #     "General": 4
+  #     "Backup": 8
+  #     "Charge": 16
+  #   lambda: |-
+  #     if ((x & 0x1C) == 0)
+  #       return  std::string("None");
+  #     if ((x & 0x1C) == 4)
+  #       return  std::string("General");
+  #     if ((x & 0x1C) == 8)
+  #       return  std::string("Battery");
+  #     if ((x & 0x1C) == 16)
+  #       return  std::string("Charge");
+  #     return {};
+  #   write_lambda: |-
+  #     uint16_t unmodified =  id(reg_276_raw).state;
+  #     uint16_t modified = ((unmodified & ~0x1C) | value);
+  #     return modified;
 
-  - platform: modbus_controller            #277  Select Prog4 Mode Option
-    use_write_multiple: true
-    modbus_controller_id: inverter
-    name: "${friendly_name} Prog4 Mode Option"
-    id: inverter_esphome_select_system_mode_program_option_time_4
-    address: 277
-    value_type: U_WORD
-    optionsmap:
-      "None": 0
-      "General": 4
-      "Backup": 8
-      "Charge": 16
-    lambda: |-
-      if ((x & 0x1C) == 0)
-        return  std::string("None");
-      if ((x & 0x1C) == 4)
-        return  std::string("General");
-      if ((x & 0x1C) == 8)
-        return  std::string("Battery");
-      if ((x & 0x1C) == 16)
-        return  std::string("Charge");
-      return {};
-    write_lambda: |-
-      uint16_t unmodified =  id(reg_277_raw).state;
-      uint16_t modified = ((unmodified & ~0x1C) | value);
-      return modified;
+  # - platform: modbus_controller            #277  Select Prog4 Mode Option
+  #   use_write_multiple: true
+  #   modbus_controller_id: inverter
+  #   name: "${friendly_name} Prog4 Mode Option"
+  #   id: inverter_esphome_select_system_mode_program_option_time_4
+  #   address: 277
+  #   value_type: U_WORD
+  #   optionsmap:
+  #     "None": 0
+  #     "General": 4
+  #     "Backup": 8
+  #     "Charge": 16
+  #   lambda: |-
+  #     if ((x & 0x1C) == 0)
+  #       return  std::string("None");
+  #     if ((x & 0x1C) == 4)
+  #       return  std::string("General");
+  #     if ((x & 0x1C) == 8)
+  #       return  std::string("Battery");
+  #     if ((x & 0x1C) == 16)
+  #       return  std::string("Charge");
+  #     return {};
+  #   write_lambda: |-
+  #     uint16_t unmodified =  id(reg_277_raw).state;
+  #     uint16_t modified = ((unmodified & ~0x1C) | value);
+  #     return modified;
 
-  - platform: modbus_controller            #278  Select Prog5 Mode Option
-    use_write_multiple: true
-    modbus_controller_id: inverter
-    name: "${friendly_name} Prog5 Mode Option"
-    id: inverter_esphome_select_system_mode_program_option_time_5
-    address: 278
-    value_type: U_WORD
-    optionsmap:
-      "None": 0
-      "General": 4
-      "Backup": 8
-      "Charge": 16
-    lambda: |-
-      if ((x & 0x1C) == 0)
-        return  std::string("None");
-      if ((x & 0x1C) == 4)
-        return  std::string("General");
-      if ((x & 0x1C) == 8)
-        return  std::string("Battery");
-      if ((x & 0x1C) == 16)
-        return  std::string("Charge");
-      return {};
-    write_lambda: |-
-      uint16_t unmodified =  id(reg_278_raw).state;
-      uint16_t modified = ((unmodified & ~0x1C) | value);
-      return modified;
+  # - platform: modbus_controller            #278  Select Prog5 Mode Option
+  #   use_write_multiple: true
+  #   modbus_controller_id: inverter
+  #   name: "${friendly_name} Prog5 Mode Option"
+  #   id: inverter_esphome_select_system_mode_program_option_time_5
+  #   address: 278
+  #   value_type: U_WORD
+  #   optionsmap:
+  #     "None": 0
+  #     "General": 4
+  #     "Backup": 8
+  #     "Charge": 16
+  #   lambda: |-
+  #     if ((x & 0x1C) == 0)
+  #       return  std::string("None");
+  #     if ((x & 0x1C) == 4)
+  #       return  std::string("General");
+  #     if ((x & 0x1C) == 8)
+  #       return  std::string("Battery");
+  #     if ((x & 0x1C) == 16)
+  #       return  std::string("Charge");
+  #     return {};
+  #   write_lambda: |-
+  #     uint16_t unmodified =  id(reg_278_raw).state;
+  #     uint16_t modified = ((unmodified & ~0x1C) | value);
+  #     return modified;
 
-  - platform: modbus_controller            #279  Select Prog6 Mode Option
-    use_write_multiple: true
-    modbus_controller_id: inverter
-    name: "${friendly_name} Prog6 Mode Option"
-    id: inverter_esphome_select_system_mode_program_option_time_6
-    address: 279
-    value_type: U_WORD
-    optionsmap:
-      "None": 0
-      "General": 4
-      "Backup": 8
-      "Charge": 16
-    lambda: |-
-      if ((x & 0x1C) == 0)
-        return  std::string("None");
-      if ((x & 0x1C) == 4)
-        return  std::string("General");
-      if ((x & 0x1C) == 8)
-        return  std::string("Battery");
-      if ((x & 0x1C) == 16)
-        return  std::string("Charge");
-      return {};
-    write_lambda: |-
-      uint16_t unmodified =  id(reg_279_raw).state;
-      uint16_t modified = ((unmodified & ~0x1C) | value);
-      return modified;
+  # - platform: modbus_controller            #279  Select Prog6 Mode Option
+  #   use_write_multiple: true
+  #   modbus_controller_id: inverter
+  #   name: "${friendly_name} Prog6 Mode Option"
+  #   id: inverter_esphome_select_system_mode_program_option_time_6
+  #   address: 279
+  #   value_type: U_WORD
+  #   optionsmap:
+  #     "None": 0
+  #     "General": 4
+  #     "Backup": 8
+  #     "Charge": 16
+  #   lambda: |-
+  #     if ((x & 0x1C) == 0)
+  #       return  std::string("None");
+  #     if ((x & 0x1C) == 4)
+  #       return  std::string("General");
+  #     if ((x & 0x1C) == 8)
+  #       return  std::string("Battery");
+  #     if ((x & 0x1C) == 16)
+  #       return  std::string("Charge");
+  #     return {};
+  #   write_lambda: |-
+  #     uint16_t unmodified =  id(reg_279_raw).state;
+  #     uint16_t modified = ((unmodified & ~0x1C) | value);
+  #     return modified;
